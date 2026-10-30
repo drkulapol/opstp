@@ -72,6 +72,20 @@ footer{max-width:1320px;margin:0 auto;padding:16px 20px 30px;color:var(--muted);
 footer a{color:var(--accent)}
 .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1d2321;color:#fff;padding:8px 16px;border-radius:8px;font-size:13px;opacity:0;transition:.2s;pointer-events:none}
 .toast.show{opacity:1}
+
+details.guide>summary{cursor:pointer;font-weight:600;font-size:15px;color:var(--accent);list-style:none}
+details.guide>summary::before{content:'▸ ';}
+details.guide[open]>summary::before{content:'▾ ';}
+.guide h4{margin:16px 0 6px;font-size:14px}
+.guide ol,.guide ul{margin:4px 0;padding-left:22px}
+.guide li{margin:2px 0}
+.guide code{background:#eef0ed;padding:0 5px;border-radius:4px;font-size:12.5px}
+.codebox{position:relative;margin-top:8px}
+.codebox pre{background:#1d2321;color:#e6ece8;padding:14px;border-radius:8px;max-height:420px;overflow:auto;font-size:12px;line-height:1.45;margin:0}
+.codebox .btn{position:absolute;top:8px;right:22px;background:#fff}
+.gtbl{width:auto;min-width:60%;border:1px solid var(--line);margin-top:6px}
+.gtbl th{position:static;cursor:default}
+.gtbl td{white-space:normal}
 </style>
 </head>
 <body>
@@ -80,6 +94,51 @@ footer a{color:var(--accent)}
   <p>จับคู่ด้วย HN + วันที่รับบริการ · ใช้ VN = SEQ ช่วยตัดสินเมื่อวันเดียวกันมีหลาย visit · ประมวลผลในเบราว์เซอร์ ไม่มีการส่งข้อมูลออก</p>
 </header>
 <main>
+  <section class="card">
+    <details class="guide" id="guide">
+      <summary>คู่มือดึงข้อมูลลูกหนี้ STP จาก HOSxP XE (SQL)</summary>
+      <h4>ขั้นตอน</h4>
+      <ol>
+        <li>กดปุ่ม <b>คัดลอก SQL</b> ด้านล่าง</li>
+        <li>แก้ช่วงวันที่ในบรรทัดแรก ๆ (CTE <code>params</code>): <code>d1</code> = วันเริ่ม, <code>d2</code> = วันสิ้นสุด (รูปแบบ <code>YYYY-MM-DD</code> ปี ค.ศ.) ค่าตั้งต้นคือปีงบ 2569: <code>2025-10-01</code> ถึง <code>2026-09-30</code></li>
+        <li>รันใน HOSxP XE (เมนู SQL Query) หรือโปรแกรมที่ต่อ PostgreSQL ของ HOSxP ได้ เช่น pgAdmin / DBeaver</li>
+        <li>Export ผลลัพธ์เป็น Excel (.xls/.xlsx) หรือ CSV <b>ห้ามเปลี่ยนชื่อคอลัมน์</b> (หน้าเว็บอ่านจากชื่อ <code>hn</code>, <code>visit_date</code>, <code>vn</code>)</li>
+        <li>ลากไฟล์ที่ได้มาวางในหน้านี้พร้อมไฟล์ REP (.xls หรือ .zip)</li>
+      </ol>
+      <h4>คอลัมน์ที่ได้</h4>
+      <table class="gtbl"><thead><tr><th>คอลัมน์</th><th>ความหมาย</th></tr></thead><tbody>
+        <tr><td><code>visit_date</code></td><td>วันที่รับบริการ (ovst.vstdate) ใช้จับคู่กับ “วันเข้ารักษา” ใน REP</td></tr>
+        <tr><td><code>hn</code></td><td>HN ใช้จับคู่กับ HN ใน REP (หน้าเว็บตัดเลข 0 นำหน้าให้เอง)</td></tr>
+        <tr><td><code>first_name</code>, <code>last_name</code></td><td>คำนำหน้า+ชื่อ, นามสกุล</td></tr>
+        <tr><td><code>pttype</code>, <code>pttype_name</code></td><td>สิทธิหลักของ visit</td></tr>
+        <tr><td><code>claim_fund</code></td><td>กลุ่มรายการที่เบิกได้ครบเงื่อนไข เช่น <code>ADP claim list (41003,51410)</code>, <code>HIV drug (…)</code>, <code>Drug J2 (…)</code></td></tr>
+        <tr><td><code>check_status</code></td><td><code>COMPLETE</code> = ข้อมูลครบ, <code>INCOMPLETE</code> = ยังขาดรหัสประกอบการเบิก</td></tr>
+        <tr><td><code>missing_detail</code></td><td>รายการที่ขาด เช่น <code>56xxx -> missing H9339</code></td></tr>
+        <tr><td><code>vn</code></td><td>VN ซึ่งตรงกับ “รหัสบริการ (SEQ)” ใน REP ใช้ตัดสินเมื่อวันเดียวกันมีหลาย visit</td></tr>
+      </tbody></table>
+      <h4>หลักการของ SQL</h4>
+      <ul>
+        <li><b>เลือก visit:</b> OPD (ไม่มี AN) ในช่วงวันที่ ที่สิทธิหลักหรือสิทธิใน <code>visit_pttype</code> มี <code>hipdata_code</code> หรือ <code>nhso_code</code> = <code>STP</code></li>
+        <li><b>รวบรวมข้อมูลต่อ visit:</b> ICD10 (<code>ovstdiag</code>), รหัส ADP ของค่าบริการ (<code>opitemrece</code> + <code>nondrugitems.nhso_adp_code</code>), รหัส PP special</li>
+        <li><b>จับกลุ่มยา:</b> อ่านชื่อและความแรงจาก <code>drugitems</code> แล้วเทียบด้วย regex ตามตัวยาสำคัญ ได้แก่ ยาต้านไวรัส HIV, Clopidogrel, ยา จ(2), Antidote และยาขับเหล็ก (D56) ถ้ามียาที่จับไม่ได้ ให้เพิ่ม icode ใน CTE <code>drug_manual</code> (แทน <code>'XXXXXXX'</code>)</li>
+        <li><b>กฎตรวจความครบ (rule_hit):</b> ถ้ามีรายการหลัก ต้องมีรหัสประกอบด้วย เช่น
+          <ul>
+            <li>TB (A15–A19): CXR → <code>CXRTB</code>, 35001 → <code>T3310</code>, 36018 → <code>T2130</code>, ต้องมี <code>FOLLOWTB</code></li>
+            <li>HIV (B20–B24): แล็บ 30101/32202/32203/32501/32502/30509/36362 → รหัส <code>LAB…F1</code>/<code>LABCD4</code>/<code>LABVL</code></li>
+            <li>Thalassemia (D56): 30104 → <code>TDT_HCT</code>, 30306 → <code>TDT_SEF</code></li>
+            <li>กายภาพ 56xxx → <code>H9339</code></li>
+            <li>จิตเวช F00–F99 → ต้องมีอย่างน้อย 1 ใน <code>H9449.1/H9449.2/H9433.1/H9433.2</code></li>
+            <li>ANC Z34–Z36: 30313 → <code>TLM_LTYP</code></li>
+          </ul></li>
+        <li><b>รายการเบิกทั่วไป:</b> รหัส ADP ที่อยู่ในรายการ <code>biglist</code> (บริการ/แล็บ/X-ray/หัตถการ/อุปกรณ์/DRUGP/TELMED/FP ฯลฯ), รหัส H/S list และคัดกรองมะเร็งปากมดลูกในหญิงอายุ 15–59 ปี (<code>1B004…</code>)</li>
+      </ul>
+      <div class="msg note"><b>ข้อควรรู้:</b> SQL นี้ส่งออก<b>เฉพาะ visit STP ที่มีรายการเบิกได้อย่างน้อย 1 กฎ</b> (เพราะ <code>JOIN agg</code>) visit STP ที่ไม่มีรายการเบิกแยกจะไม่อยู่ในรายการลูกหนี้ ดังนั้น REP ที่หน้าเว็บขึ้นว่า “ไม่มีในลูกหนี้” อาจเป็น visit ที่รหัสรายการยังไม่อยู่ใน <code>biglist</code> ควรเพิ่มรหัสนั้นใน <code>biglist</code> แล้วรันใหม่ ถ้าต้องการให้ส่งออกทุก visit STP ให้เปลี่ยน <code>JOIN agg a</code> เป็น <code>LEFT JOIN agg a</code></div>
+      <div class="codebox">
+        <button class="btn" id="btnCopySql">คัดลอก SQL</button>
+        <pre id="sqlPre"></pre>
+      </div>
+    </details>
+  </section>
   <section class="card">
     <div id="drop" class="drop">
       <div style="font-size:15px"><b>ลากไฟล์มาวาง</b> หรือคลิกเพื่อเลือกไฟล์</div>
@@ -121,6 +180,491 @@ footer a{color:var(--accent)}
 </footer>
 <div class="toast" id="toast"></div>
 
+<script type="text/plain" id="sqlSrc">
+WITH params AS (
+    SELECT DATE '2025-10-01' AS d1,
+           DATE '2026-09-30' AS d2
+),
+v AS (
+    SELECT o.vn, o.hn, o.vstdate, o.pttype,
+           p.pname, p.fname, p.lname, p.sex,
+           CAST(EXTRACT(YEAR FROM age(o.vstdate, p.birthday)) AS integer) AS age_y
+    FROM ovst o
+    JOIN patient p ON p.hn = o.hn
+    CROSS JOIN params pr
+    WHERE o.vstdate BETWEEN pr.d1 AND pr.d2
+      AND COALESCE(o.an, '') = ''
+      AND (
+            EXISTS (SELECT 1 FROM pttype t
+                    WHERE t.pttype = o.pttype
+                      AND (UPPER(TRIM(t.hipdata_code)) = 'STP' OR UPPER(TRIM(t.nhso_code)) = 'STP'))
+         OR EXISTS (SELECT 1 FROM visit_pttype vp
+                    JOIN pttype t ON t.pttype = vp.pttype
+                    WHERE vp.vn = o.vn
+                      AND (UPPER(TRIM(t.hipdata_code)) = 'STP' OR UPPER(TRIM(t.nhso_code)) = 'STP'))
+      )
+),
+dx AS (
+    SELECT d.vn, array_agg(DISTINCT UPPER(TRIM(d.icd10))) AS dx
+    FROM ovstdiag d
+    WHERE d.vn IN (SELECT vn FROM v)
+    GROUP BY d.vn
+),
+itm AS (
+    SELECT oi.vn,
+           array_remove(array_agg(DISTINCT UPPER(TRIM(n.nhso_adp_code))), '') AS adp,
+           array_agg(DISTINCT CAST(oi.icode AS text)) AS icodes
+    FROM opitemrece oi
+    LEFT JOIN nondrugitems n ON n.icode = oi.icode
+    WHERE oi.vn IN (SELECT vn FROM v)
+    GROUP BY oi.vn
+),
+pps AS (
+    SELECT ps.vn, array_agg(DISTINCT UPPER(TRIM(t.pp_special_code))) AS pp
+    FROM pp_special ps
+    JOIN pp_special_type t ON t.pp_special_type_id = ps.pp_special_type_id
+    WHERE ps.vn IN (SELECT vn FROM v)
+    GROUP BY ps.vn
+),
+drug_manual AS (
+    SELECT CAST(icode AS text) AS icode, grp
+    FROM (VALUES ('XXXXXXX', 'HIV')) AS m(icode, grp)
+    WHERE icode <> 'XXXXXXX'
+),
+drug_ingr AS (
+    SELECT * FROM (VALUES
+        ('ABC', 'ABACAVIR|\mABC\M|ZIAGEN|KIVEXA'),
+        ('3TC', 'LAMIVUDINE|\m3TC\M|EPIVIR|KIVEXA|COMBIVIR|\mTLD\M'),
+        ('ATV', 'ATAZANAVIR|\mATV\M|REYATAZ'),
+        ('DRV', 'DARUNAVIR|\mDRV\M|PREZISTA'),
+        ('EFV', 'EFAVIRENZ|\mEFV\M|STOCRIN|ATRIPLA|TEEVIR'),
+        ('NVP', 'NEVIRAPINE|\mNVP\M|VIRAMUNE'),
+        ('LPV', 'LOPINAVIR|\mLPV|KALETRA|ALUVIA'),
+        ('RTV', 'RITONAVIR|\mRTV\M|NORVIR|KALETRA|ALUVIA|LPV\s*/\s*R\M'),
+        ('RPV', 'RILPIVIRINE|\mRPV\M|EDURANT'),
+        ('TDF', 'TENOFOVIR(?!\s*ALAFENAMIDE)|\mTDF\M|VIREAD|TRUVADA|ATRIPLA|TEEVIR|\mTLD\M'),
+        ('TAF', 'ALAFENAMIDE|\mTAF\M|DESCOVY'),
+        ('FTC', 'EMTRICITABINE|\mFTC\M|TRUVADA|ATRIPLA|TEEVIR|DESCOVY'),
+        ('AZT', 'ZIDOVUDINE|\mAZT\M|\mZDV\M|RETROVIR|COMBIVIR'),
+        ('DTG', 'DOLUTEGRAVIR|\mDTG\M|TIVICAY|\mTLD\M'),
+        ('ATOR', 'ATORVASTATIN|LIPITOR'),
+        ('SIMVA', 'SIMVASTATIN|ZOCOR'),
+        ('FENO', 'FENOFIBRATE|LIPANTHYL|TRICOR'),
+        ('GEMFI', 'GEMFIBROZIL|\mLOPID\M'),
+        ('CLOPI', 'CLOPIDOGREL|PLAVIX'),
+        ('ADA', 'ADALIMUMAB|HUMIRA'),
+        ('ATG', 'THYMOCYTE|\mATG\M|THYMOGLOBULIN'),
+        ('BEVA', 'BEVACIZUMAB|AVASTIN'),
+        ('BORT', 'BORTEZOMIB|VELCADE'),
+        ('BOTOX', 'BOTULINUM\s*TOXIN|BOTOX|DYSPORT'),
+        ('CAZAVI', 'AVIBACTAM|ZAVICEFTA'),
+        ('CYST', 'CYSTEAMINE|MERCAPTAMINE|CYSTAGON'),
+        ('DASA', 'DASATINIB|SPRYCEL'),
+        ('DFX', 'DEFERASIROX|DEFERAXIROX|EXJADE|JADENU'),
+        ('DFP', 'DEFERIPRONE|\mL1\M|L-ONE|FERRIPROX'),
+        ('DFO', 'DEFEROXAMINE|DESFERRIOXAMINE|DESFERAL'),
+        ('DOCE', 'DOCETAXEL|TAXOTERE'),
+        ('DONE', 'DONEPEZIL|ARICEPT'),
+        ('ERLO', 'ERLOTINIB|TARCEVA'),
+        ('F8', 'FACTOR\s*(VIII|8)\M|ANTI-?HA?EMOPHILIC|KOATE|HEMOFIL'),
+        ('F9', 'FACTOR\s*(IX|9)\M|OCTANINE|BENEFIX'),
+        ('IMA', 'IMATINIB|GLIVEC|GLEEVEC'),
+        ('IMIG', 'IMIGLUCERASE|CEREZYME'),
+        ('IVIG', 'IVIG|IGIV|IMMUNOGLOBULIN|IMMUNE\s*GLOBULIN'),
+        ('INFL', 'INFLIXIMAB|REMICADE|REMSIMA'),
+        ('LACO', 'LACOSAMIDE|VIMPAT'),
+        ('LETRO', 'LETROZOLE|FEMARA'),
+        ('LEUP', 'LEUPRORELIN|LEUPROLIDE|LUCRIN|ELIGARD'),
+        ('LZD', 'LINEZOLID|ZYVOX'),
+        ('LAMB', 'AMBISOME|LIPOSOMAL\s*AMPHO|AMPHOTERICIN\s*B?\s*LIPOSOM'),
+        ('MICA', 'MICAFUNGIN|MYCAMINE'),
+        ('NILO', 'NILOTINIB|TASIGNA'),
+        ('OCT', 'OCTREOTIDE|SANDOSTATIN'),
+        ('PEME', 'PEMETREXED|ALIMTA'),
+        ('POSA', 'POSACONAZOLE|NOXAFIL'),
+        ('RBV', 'RIBAVIRIN'),
+        ('RIBO', 'RIBOCICLIB|KISQALI'),
+        ('RTX', 'RITUXIMAB|MABTHERA'),
+        ('SAPRO', 'SAPROPTERIN|KUVAN|\mBH4\M'),
+        ('SOF', 'SOFOSBUVIR|EPCLUSA'),
+        ('VEL', 'VELPATASVIR|EPCLUSA'),
+        ('TSH', 'THYROTROPIN|THYROGEN'),
+        ('TCZ', 'TOCILIZUMAB|ACTEMRA'),
+        ('TRAS', 'TRASTUZUMAB|HERCEPTIN'),
+        ('TRIP', 'TRIPTORELIN|DIPHERELINE'),
+        ('VORI', 'VORICONAZOLE|VFEND'),
+        ('SNAKE', 'งู|ANTI-?VENOM|ANTI-?VENIN|ANTIVENENE|SNAKE'),
+        ('NANO2', 'SODIUM\s*NITRITE'),
+        ('THIO', 'THIOSULFATE|THIOSULPHATE'),
+        ('MB', 'METHYLENE\s*BLUE'),
+        ('BAL', 'DIMERCAPROL|\mBAL\M'),
+        ('DAT', 'DIPHTHERIA|คอตีบ'),
+        ('DPH', 'DIPHENHYDRAMINE|BENADRYL'),
+        ('EDTA', 'EDETATE|CA\s*-?\s*EDTA|CALCIUM\s*DISODIUM'),
+        ('DMSA', 'SUCCIMER|\mDMSA\M'),
+        ('BAT', 'BOTULIN[A-Z]*\s*ANTI-?TOXIN|BOTULISM')
+    ) AS t(code, rx)
+),
+drug_prod AS (
+    SELECT * FROM (VALUES
+        ('HIV', 'ABACAVIR 300 MG TAB', CAST(ARRAY['ABC'] AS text[]), CAST(ARRAY['300'] AS text[]), '', ''),
+        ('HIV', 'ABACAVIR SYRUP 20 MG/ML', CAST(ARRAY['ABC'] AS text[]), CAST(ARRAY['20'] AS text[]), '', ''),
+        ('HIV', 'ABACAVIR 600 + LAMIVUDINE 300 TAB', CAST(ARRAY['3TC','ABC'] AS text[]), CAST(ARRAY['600','300'] AS text[]), '', ''),
+        ('HIV', 'ATAZANAVIR 200 MG CAP', CAST(ARRAY['ATV'] AS text[]), CAST(ARRAY['200'] AS text[]), '', ''),
+        ('HIV', 'ATORVASTATIN 40 MG TAB', CAST(ARRAY['ATOR'] AS text[]), CAST(ARRAY['40'] AS text[]), '', ''),
+        ('HIV', 'DARUNAVIR 600 MG TAB', CAST(ARRAY['DRV'] AS text[]), CAST(ARRAY['600'] AS text[]), '', ''),
+        ('HIV', 'EFAVIRENZ 50 MG TAB', CAST(ARRAY['EFV'] AS text[]), CAST(ARRAY['50'] AS text[]), '', ''),
+        ('HIV', 'EFAVIRENZ 200 MG TAB', CAST(ARRAY['EFV'] AS text[]), CAST(ARRAY['200'] AS text[]), '', ''),
+        ('HIV', 'EFAVIRENZ 600 MG TAB', CAST(ARRAY['EFV'] AS text[]), CAST(ARRAY['600'] AS text[]), '', ''),
+        ('HIV', 'FENOFIBRATE 100 MG CAP', CAST(ARRAY['FENO'] AS text[]), CAST(ARRAY['100'] AS text[]), '', ''),
+        ('HIV', 'GEMFIBROZIL 600 MG TAB', CAST(ARRAY['GEMFI'] AS text[]), CAST(ARRAY['600'] AS text[]), '', ''),
+        ('HIV', 'LAMIVUDINE SYRUP 10 MG/ML', CAST(ARRAY['3TC'] AS text[]), CAST(ARRAY['10'] AS text[]), '', ''),
+        ('HIV', 'LAMIVUDINE 150 MG TAB', CAST(ARRAY['3TC'] AS text[]), CAST(ARRAY['150'] AS text[]), '', ''),
+        ('HIV', 'LAMIVUDINE 300 MG TAB', CAST(ARRAY['3TC'] AS text[]), CAST(ARRAY['300'] AS text[]), '', ''),
+        ('HIV', 'LOPINAVIR 200 + RITONAVIR 50 TAB', CAST(ARRAY['LPV','RTV'] AS text[]), CAST(ARRAY['200','50'] AS text[]), '', ''),
+        ('HIV', 'LOPINAVIR 80 + RITONAVIR 20 ORAL SOL', CAST(ARRAY['LPV','RTV'] AS text[]), CAST(ARRAY['80','20'] AS text[]), '', ''),
+        ('HIV', 'NEVIRAPINE 200 MG TAB', CAST(ARRAY['NVP'] AS text[]), CAST(ARRAY['200'] AS text[]), '', ''),
+        ('HIV', 'NEVIRAPINE SUSP 50 MG/5 ML', CAST(ARRAY['NVP'] AS text[]), CAST(ARRAY['50'] AS text[]), '', ''),
+        ('HIV', 'RILPIVIRINE 25 MG TAB', CAST(ARRAY['RPV'] AS text[]), CAST(ARRAY['25'] AS text[]), '', ''),
+        ('HIV', 'RITONAVIR 100 MG TAB', CAST(ARRAY['RTV'] AS text[]), CAST(ARRAY['100'] AS text[]), '', ''),
+        ('HIV', 'SIMVASTATIN 10 MG TAB', CAST(ARRAY['SIMVA'] AS text[]), CAST(ARRAY['10'] AS text[]), '', ''),
+        ('HIV', 'TDF 300 MG', CAST(ARRAY['TDF'] AS text[]), CAST(ARRAY['300'] AS text[]), '', ''),
+        ('HIV', 'ZIDOVUDINE 300 + LAMIVUDINE 150 TAB', CAST(ARRAY['3TC','AZT'] AS text[]), CAST(ARRAY['300','150'] AS text[]), '', ''),
+        ('HIV', 'ZIDOVUDINE 100 MG CAP', CAST(ARRAY['AZT'] AS text[]), CAST(ARRAY['100'] AS text[]), '', ''),
+        ('HIV', 'ZIDOVUDINE 300 MG CAP', CAST(ARRAY['AZT'] AS text[]), CAST(ARRAY['300'] AS text[]), '', ''),
+        ('HIV', 'ZIDOVUDINE SYRUP 10 MG/ML', CAST(ARRAY['AZT'] AS text[]), CAST(ARRAY['10'] AS text[]), '', ''),
+        ('HIV', 'DOLUTEGRAVIR 10 MG DISP TAB', CAST(ARRAY['DTG'] AS text[]), CAST(ARRAY['10'] AS text[]), '', ''),
+        ('HIV', 'DOLUTEGRAVIR 50 MG TAB', CAST(ARRAY['DTG'] AS text[]), CAST(ARRAY['50'] AS text[]), '', ''),
+        ('HIV', 'TDF 300 + FTC 200 + EFV 600 TAB', CAST(ARRAY['EFV','FTC','TDF'] AS text[]), CAST(ARRAY['300','200','600'] AS text[]), '', ''),
+        ('HIV', 'TDF 300 + FTC 200 TAB', CAST(ARRAY['FTC','TDF'] AS text[]), CAST(ARRAY['300','200'] AS text[]), '', ''),
+        ('HIV', 'TDF 300 + 3TC 300 + DTG 50 TAB', CAST(ARRAY['3TC','DTG','TDF'] AS text[]), CAST(ARRAY['300','50'] AS text[]), '', ''),
+        ('HIV', 'TAF 25 + FTC 200 TAB', CAST(ARRAY['FTC','TAF'] AS text[]), CAST(ARRAY['25','200'] AS text[]), '', ''),
+        ('HIV', 'TAF 25 + FTC 200 + DTG 50 TAB', CAST(ARRAY['DTG','FTC','TAF'] AS text[]), CAST(ARRAY['25','200','50'] AS text[]), '', ''),
+        ('CLOPI', 'CLOPIDOGREL 75 MG', CAST(ARRAY['CLOPI'] AS text[]), CAST(ARRAY['75'] AS text[]), '', ''),
+        ('JOR2', 'ADALIMUMAB 40 MG', CAST(ARRAY['ADA'] AS text[]), CAST(ARRAY['40'] AS text[]), '', ''),
+        ('JOR2', 'ADALIMUMAB 20 MG', CAST(ARRAY['ADA'] AS text[]), CAST(ARRAY['20'] AS text[]), '', ''),
+        ('JOR2', 'ATG 25 MG', CAST(ARRAY['ATG'] AS text[]), CAST(ARRAY['25'] AS text[]), '', ''),
+        ('JOR2', 'BEVACIZUMAB 100 MG', CAST(ARRAY['BEVA'] AS text[]), CAST(ARRAY['100'] AS text[]), '', ''),
+        ('JOR2', 'BORTEZOMIB 3.5 MG', CAST(ARRAY['BORT'] AS text[]), CAST(ARRAY['3.5'] AS text[]), '', ''),
+        ('JOR2', 'BOTULINUM TOXIN A 100 IU', CAST(ARRAY['BOTOX'] AS text[]), CAST(ARRAY['100'] AS text[]), '', ''),
+        ('JOR2', 'BOTULINUM TOXIN A 500 IU', CAST(ARRAY['BOTOX'] AS text[]), CAST(ARRAY['500'] AS text[]), '', ''),
+        ('JOR2', 'CEFTAZIDIME + AVIBACTAM', CAST(ARRAY['CAZAVI'] AS text[]), CAST(ARRAY[] AS text[]), '', ''),
+        ('JOR2', 'CYSTEAMINE 150 MG', CAST(ARRAY['CYST'] AS text[]), CAST(ARRAY['150'] AS text[]), '', ''),
+        ('JOR2', 'DASATINIB 50 MG', CAST(ARRAY['DASA'] AS text[]), CAST(ARRAY['50'] AS text[]), '', ''),
+        ('JOR2', 'DASATINIB 70 MG', CAST(ARRAY['DASA'] AS text[]), CAST(ARRAY['70'] AS text[]), '', ''),
+        ('JOR2', 'DEFERASIROX 250 MG', CAST(ARRAY['DFX'] AS text[]), CAST(ARRAY['250'] AS text[]), '', ''),
+        ('JOR2', 'DOCETAXEL 20 MG', CAST(ARRAY['DOCE'] AS text[]), CAST(ARRAY['20'] AS text[]), '', ''),
+        ('JOR2', 'DOCETAXEL 80 MG', CAST(ARRAY['DOCE'] AS text[]), CAST(ARRAY['80'] AS text[]), '', ''),
+        ('JOR2', 'DONEPEZIL 10 MG', CAST(ARRAY['DONE'] AS text[]), CAST(ARRAY['10'] AS text[]), '', ''),
+        ('JOR2', 'DONEPEZIL 5 MG', CAST(ARRAY['DONE'] AS text[]), CAST(ARRAY['5'] AS text[]), '', ''),
+        ('JOR2', 'ERLOTINIB 150 MG', CAST(ARRAY['ERLO'] AS text[]), CAST(ARRAY['150'] AS text[]), '', ''),
+        ('JOR2', 'FACTOR VIII 250 IU', CAST(ARRAY['F8'] AS text[]), CAST(ARRAY['250'] AS text[]), '', ''),
+        ('JOR2', 'FACTOR VIII 500 IU', CAST(ARRAY['F8'] AS text[]), CAST(ARRAY['500'] AS text[]), '', ''),
+        ('JOR2', 'FACTOR IX 500 IU', CAST(ARRAY['F9'] AS text[]), CAST(ARRAY['500'] AS text[]), '', ''),
+        ('JOR2', 'IMATINIB 100 MG', CAST(ARRAY['IMA'] AS text[]), CAST(ARRAY['100'] AS text[]), '', ''),
+        ('JOR2', 'IMATINIB 400 MG', CAST(ARRAY['IMA'] AS text[]), CAST(ARRAY['400'] AS text[]), '', ''),
+        ('JOR2', 'IMIGLUCERASE 400 IU', CAST(ARRAY['IMIG'] AS text[]), CAST(ARRAY['400'] AS text[]), '', ''),
+        ('JOR2', 'INFLIXIMAB 100 MG', CAST(ARRAY['INFL'] AS text[]), CAST(ARRAY['100'] AS text[]), '', ''),
+        ('JOR2', 'LACOSAMIDE (ทุกขนาด)', CAST(ARRAY['LACO'] AS text[]), CAST(ARRAY[] AS text[]), '', ''),
+        ('JOR2', 'LETROZOLE 2.5 MG', CAST(ARRAY['LETRO'] AS text[]), CAST(ARRAY['2.5'] AS text[]), '', ''),
+        ('JOR2', 'LEUPRORELIN 11.25 MG', CAST(ARRAY['LEUP'] AS text[]), CAST(ARRAY['11.25'] AS text[]), '', ''),
+        ('JOR2', 'LINEZOLID 600 MG', CAST(ARRAY['LZD'] AS text[]), CAST(ARRAY['600'] AS text[]), '', ''),
+        ('JOR2', 'LIPOSOMAL AMPHOTERICIN B 50 MG', CAST(ARRAY['LAMB'] AS text[]), CAST(ARRAY['50'] AS text[]), '', ''),
+        ('JOR2', 'MICAFUNGIN 50 MG', CAST(ARRAY['MICA'] AS text[]), CAST(ARRAY['50'] AS text[]), '', ''),
+        ('JOR2', 'NILOTINIB 200 MG', CAST(ARRAY['NILO'] AS text[]), CAST(ARRAY['200'] AS text[]), '', ''),
+        ('JOR2', 'OCTREOTIDE 20 MG', CAST(ARRAY['OCT'] AS text[]), CAST(ARRAY['20'] AS text[]), '', ''),
+        ('JOR2', 'OCTREOTIDE 30 MG', CAST(ARRAY['OCT'] AS text[]), CAST(ARRAY['30'] AS text[]), '', ''),
+        ('JOR2', 'PEMETREXED 100 MG', CAST(ARRAY['PEME'] AS text[]), CAST(ARRAY['100'] AS text[]), '', ''),
+        ('JOR2', 'PEMETREXED 500 MG', CAST(ARRAY['PEME'] AS text[]), CAST(ARRAY['500'] AS text[]), '', ''),
+        ('JOR2', 'POSACONAZOLE 100 MG TAB', CAST(ARRAY['POSA'] AS text[]), CAST(ARRAY['100'] AS text[]), '', ''),
+        ('JOR2', 'POSACONAZOLE 40 MG/ML', CAST(ARRAY['POSA'] AS text[]), CAST(ARRAY['40'] AS text[]), '', ''),
+        ('JOR2', 'RIBAVIRIN 200 MG', CAST(ARRAY['RBV'] AS text[]), CAST(ARRAY['200'] AS text[]), '', ''),
+        ('JOR2', 'RIBOCICLIB 200 MG', CAST(ARRAY['RIBO'] AS text[]), CAST(ARRAY['200'] AS text[]), '', ''),
+        ('JOR2', 'RITUXIMAB 100 MG', CAST(ARRAY['RTX'] AS text[]), CAST(ARRAY['100'] AS text[]), '', ''),
+        ('JOR2', 'RITUXIMAB 500 MG', CAST(ARRAY['RTX'] AS text[]), CAST(ARRAY['500'] AS text[]), '', ''),
+        ('JOR2', 'SAPROPTERIN 10 MG', CAST(ARRAY['SAPRO'] AS text[]), CAST(ARRAY['10'] AS text[]), '', ''),
+        ('JOR2', 'SAPROPTERIN 100 MG', CAST(ARRAY['SAPRO'] AS text[]), CAST(ARRAY['100'] AS text[]), '', ''),
+        ('JOR2', 'SOFOSBUVIR 400 + VELPATASVIR 100', CAST(ARRAY['SOF','VEL'] AS text[]), CAST(ARRAY['400','100'] AS text[]), '', ''),
+        ('JOR2', 'THYROTROPIN ALFA 0.9 MG', CAST(ARRAY['TSH'] AS text[]), CAST(ARRAY['0.9'] AS text[]), '', ''),
+        ('JOR2', 'TOCILIZUMAB 80 MG', CAST(ARRAY['TCZ'] AS text[]), CAST(ARRAY['80'] AS text[]), '', ''),
+        ('JOR2', 'TOCILIZUMAB 162 MG', CAST(ARRAY['TCZ'] AS text[]), CAST(ARRAY['162'] AS text[]), '', ''),
+        ('JOR2', 'TOCILIZUMAB 400 MG', CAST(ARRAY['TCZ'] AS text[]), CAST(ARRAY['400'] AS text[]), '', ''),
+        ('JOR2', 'TRASTUZUMAB 150 MG', CAST(ARRAY['TRAS'] AS text[]), CAST(ARRAY['150'] AS text[]), '', ''),
+        ('JOR2', 'TRASTUZUMAB 440 MG', CAST(ARRAY['TRAS'] AS text[]), CAST(ARRAY['440'] AS text[]), '', ''),
+        ('JOR2', 'TRIPTORELIN 11.25 MG', CAST(ARRAY['TRIP'] AS text[]), CAST(ARRAY['11.25'] AS text[]), '', ''),
+        ('JOR2', 'VORICONAZOLE 200 MG', CAST(ARRAY['VORI'] AS text[]), CAST(ARRAY['200'] AS text[]), '', ''),
+        ('JOR2', 'VORICONAZOLE 50 MG', CAST(ARRAY['VORI'] AS text[]), CAST(ARRAY['50'] AS text[]), '', ''),
+        ('JOR2', 'IVIG 5%', CAST(ARRAY['IVIG'] AS text[]), CAST(ARRAY[] AS text[]), '', 'HEPATITIS|RABIES|TETANUS|ANTI-?D\M|RHO|HBIG|\mH?RIG\M|ERIG|THYMO|ZOSTER|CMV'),
+        ('ANTIDOTE', 'SNAKE ANTIVENOM', CAST(ARRAY['SNAKE'] AS text[]), CAST(ARRAY[] AS text[]), '', ''),
+        ('ANTIDOTE', 'SODIUM NITRITE INJ', CAST(ARRAY['NANO2'] AS text[]), CAST(ARRAY[] AS text[]), '', ''),
+        ('ANTIDOTE', 'SODIUM THIOSULFATE INJ', CAST(ARRAY['THIO'] AS text[]), CAST(ARRAY[] AS text[]), '', ''),
+        ('ANTIDOTE', 'METHYLENE BLUE INJ', CAST(ARRAY['MB'] AS text[]), CAST(ARRAY[] AS text[]), '', ''),
+        ('ANTIDOTE', 'DIMERCAPROL INJ', CAST(ARRAY['BAL'] AS text[]), CAST(ARRAY[] AS text[]), '', ''),
+        ('ANTIDOTE', 'DIPHTHERIA ANTITOXIN', CAST(ARRAY['DAT'] AS text[]), CAST(ARRAY[] AS text[]), '', ''),
+        ('ANTIDOTE', 'CALCIUM DISODIUM EDETATE INJ', CAST(ARRAY['EDTA'] AS text[]), CAST(ARRAY[] AS text[]), '', ''),
+        ('ANTIDOTE', 'SUCCIMER CAP', CAST(ARRAY['DMSA'] AS text[]), CAST(ARRAY[] AS text[]), '', ''),
+        ('ANTIDOTE', 'BOTULINUM ANTITOXIN', CAST(ARRAY['BAT'] AS text[]), CAST(ARRAY[] AS text[]), '', ''),
+        ('ANTIDOTE', 'DIPHENHYDRAMINE INJ', CAST(ARRAY['DPH'] AS text[]), CAST(ARRAY[] AS text[]), 'INJ|AMP|VIAL|\mIV\M|\mIM\M|ฉีด', ''),
+        ('IRON', 'DEFERASIROX 250 MG', CAST(ARRAY['DFX'] AS text[]), CAST(ARRAY['250'] AS text[]), '', ''),
+        ('IRON', 'DEFERIPRONE 500 MG', CAST(ARRAY['DFP'] AS text[]), CAST(ARRAY['500'] AS text[]), '', ''),
+        ('IRON', 'DEFEROXAMINE 500 MG', CAST(ARRAY['DFO'] AS text[]), CAST(ARRAY['500'] AS text[]), '', '')
+    ) AS t(grp, pname, ings, nums, frx, xrx)
+),
+drug_txt AS (
+    SELECT CAST(d.icode AS text) AS icode, d.name,
+           UPPER(CONCAT_WS(' ', d.name, d.strength)) AS txt
+    FROM drugitems d
+    WHERE d.icode IN (SELECT oi.icode FROM opitemrece oi WHERE oi.vn IN (SELECT vn FROM v))
+),
+drug_ing AS (
+    SELECT t.icode, t.name, t.txt,
+           ARRAY(SELECT i.code FROM drug_ingr i WHERE t.txt ~ i.rx ORDER BY i.code) AS ings,
+           ARRAY(SELECT DISTINCT m[1] FROM regexp_matches(t.txt, '([0-9]+(?:\.[0-9]+)?)', 'g') AS m) AS nums
+    FROM drug_txt t
+),
+drug_match AS (
+    SELECT di.icode, di.name, p.grp, p.pname
+    FROM drug_ing di
+    JOIN drug_prod p
+      ON di.ings @> p.ings AND di.ings <@ p.ings
+     AND (cardinality(di.nums) = 0 OR di.nums @> p.nums)
+     AND (p.frx = '' OR di.txt ~ p.frx)
+     AND (p.xrx = '' OR NOT (di.txt ~ p.xrx))
+    UNION
+    SELECT d.icode, d.name, m.grp, 'MANUAL'
+    FROM drug_txt d
+    JOIN drug_manual m ON m.icode = d.icode
+),
+vdrug AS (
+    SELECT oi.vn, m.grp, array_agg(DISTINCT m.name ORDER BY m.name) AS drugs
+    FROM opitemrece oi
+    JOIN drug_match m ON m.icode = CAST(oi.icode AS text)
+    WHERE oi.vn IN (SELECT vn FROM v)
+    GROUP BY oi.vn, m.grp
+),
+f AS (
+    SELECT v.*,
+           COALESCE(array_remove(i.adp, NULL), CAST(ARRAY[] AS text[])) AS adp,
+           COALESCE(i.icodes, CAST(ARRAY[] AS text[])) AS icodes,
+           COALESCE(s.pp, CAST(ARRAY[] AS text[])) AS pp,
+           EXISTS (SELECT 1 FROM unnest(d.dx) c WHERE c ~ '^A1[5-9]') AS is_tb,
+           EXISTS (SELECT 1 FROM unnest(d.dx) c WHERE c ~ '^B2[0-4]') AS is_hiv,
+           EXISTS (SELECT 1 FROM unnest(d.dx) c WHERE c ~ '^D56')     AS is_d56,
+           EXISTS (SELECT 1 FROM unnest(d.dx) c WHERE c ~ '^F[0-9]')  AS is_psy,
+           EXISTS (SELECT 1 FROM unnest(d.dx) c WHERE c ~ '^Z3[4-6]') AS is_anc
+    FROM v
+    LEFT JOIN dx  d ON d.vn = v.vn
+    LEFT JOIN itm i ON i.vn = v.vn
+    LEFT JOIN pps s ON s.vn = v.vn
+),
+biglist AS (
+    SELECT CAST(ARRAY[
+        '41001','41002','41203','41201','41202','41301','41003','42001','42101','42102','42201','42202',
+        '42010','42330','42331','42501','42502','42503','42504','42505','42506','42507','42508','42509',
+        '42510','42511','42601','42602','42603','42604','42605','42701','42702','42703','42512','42513',
+        '42514','42515','42516','43001','43002','43003','43004','43005','43501','43502','43601','43701',
+        '43910','43911','44001','44002','44003','44004','44005','44010','44011','44020','44101','44102',
+        '44103','44110','44111','44140','44150','44201','44202','44210','44220','44221','44222','44223',
+        '44230','44231','44232','44233','44240','44241','44242','44243','44250','44251','44252','44260',
+        '44261','44301','44302','44310','44311','44401','44402','44420','44421','44501','44502','44503',
+        '44510','44511','44610','44611','44612','44701','44710','44750','44901','44910','45001','45003',
+        '45004','45005','45010','45011','45020','45021','45022','45030','45101','45102','45103','45104',
+        '45110','45111','45120','45121','45130','45140','45141','45150','45160','45161','45162','45201',
+        '45211','45220','45230','45231','45240','45250','45260','45261','45301','45302','45310','45320',
+        '45330','45331','45332','45401','45402','45403','45404','45410','45420','45501','45502','45503',
+        '45504','45505','45510','45511','45512','45513','45601','45602','45611','45612','45613','45640',
+        '45641','45642','45701','45710','45760','45761','45901','45902','49001','49002','49003','49004',
+        '49005','49006','49007','49101','49201','49202','49203','49206','49207','49208','49301','49302',
+        '49303','49304','49305','49306','49401','49402','49403','49404','49501','49601','49602','49603',
+        '49008','49009','47701','47051','47050','47004','47052','47053','47001','47002','47054','47055',
+        '47003','47512','47513','47514','47510','47515','47516','47517','47509','47504','47511','47503',
+        '47501','47502','47401','47406','47402','47407','47508','47506','47507','47408','47409','47410',
+        '47411','47404','47405','47505','47412','47602','47601','47603','47605','47606','47607','47604',
+        '47206','47204','47203','47403','48202','48203','48204','48205','48201','48208','48209','48210',
+        '48002','48001','41004','41101','41102','41204','41205','41206','42143','42144','42146','42332',
+        '42333','42336','42337','42338','42339','42340','42533','42534','42606','42607','43006','43007',
+        '43040','43041','43042','43043','43044','43101','43103','43105','43141','43212','43221','43222',
+        '43243','43245','43250','43251','43253','43261','43262','43301','43303','43330','43423','43440',
+        '43506','43507','43508','43509','43510','43512','43514','43530','43602','43603','43604','43611',
+        '43614','43640','43643','43644','43720','43721','43722','43723','43724','43725','43752','43760',
+        '43762','43763','43764','43780','43781','43782','43783','43784','43785','44006','44105','44143',
+        '44144','44146','44234','44253','44303','44312','44404','44405','44422','44423','44505','44508',
+        '44531','44532','44602','44603','44620','44720','44721','44722','44723','44724','44725','44726',
+        '44727','44728','44751','44760','44761','44780','44781','44782','44783','44784','44785','44786',
+        '44787','44788','45050','45105','45106','45117','45118','45119','45142','45143','45144','45145',
+        '45146','45147','45151','45152','45153','45170','45171','45172','45202','45244','45252','45257',
+        '45258','45259','45262','45328','45329','45338','45339','45405','45418','45419','45422','45423',
+        '45506','45507','45514','45515','45531','45533','45580','45603','45608','45609','45720','45721',
+        '45722','45723','45724','45725','45726','45727','45728','45748','45749','45750','45751','45752',
+        '45753','45762','45763','45778','45779','45780','45781','45782','45783','45784','45785','45786',
+        '45787','45788','45903','45904','45905','47202','47201','47005','47205','47301','48206','48207',
+        'OP8001','OP8002','51110','51111','51112','51113','51114','51115','51116','51117','51118','51119',
+        '51120','51130','51131','51132','51133','51134','51140','51141','51142','51210','51211','51212',
+        '51220','51230','51231','51240','51241','51310','51311','51312','51313','51314','51410','51411',
+        '51412','51420','51421','51422','51423','51430','51440','51441','51460','51461','51610','51611',
+        '51900','51901','51902','51903','51910','51911','51912','OP9001','OP9002','OP9003','OP9004','OP9005',
+        'OP9006','OP9007','OP9008','OP9009','OP9010','OP9011','OP9012','OP9013','OP9014','OP9015','OP9016',
+        'OP9017','OP9018','OP9019','OP9020','OP9021','70201','70301','70320','70330','71250','71270','71271',
+        '71272','71320','71321','71322','71330','71331','71332','71333','71342','71512','71520','71530',
+        '71531','71540','71541','71542','71543','71544','71545','71550','71551','71560','71561','71562',
+        '71570','71610','71661','71680','71810','71811','71840','71841','72610','72940','72941','72942',
+        '72943','06.01','06.11','08.11','10.21','11.21','11.22','11.29','15.01','21.22','22.12','24.11',
+        '24.12','25.01','26.12','27.21','27.22','27.23','33.24','34.23','34.24','34.26','38.21','40.11',
+        '45.24','45.40','48.24','48.26','49.22','49.23','54.22','55.23','57.33','57.39','60.11','61.11',
+        '64.11','67.11','67.12','76.11','80.30','80.31','80.34','80.39','83.21','85.12','85.91','86.01',
+        '87.74','87.76','1001','1007','1008','1009','1003','1101','1102','1104','2001','2002','2003','2004',
+        '2005','2006','2007','2101','2102','2103','2104','2105','2106','2113','2115','2201','2202A','2202B',
+        '2203','2204','2205','2206','2207','2401','2402','2403','2404','2405','2405A','2601','2701','2702',
+        '2704','2704A','2704B','2704C','2704D','3003','3012','3013','3019','4001','4002','4003','4004',
+        '4005','4006','4007','4008','4009','4010','4012','4013','4014','4015','4016','4019','4022','4023',
+        '4024','4101','4102','4103','4104','4107','4108','4109','4115','4116','4301','4302','4303','4304',
+        '4305','4305A','4305B','4305C','4305D','4306','4307','4308','4309','4310','4311','4312','4313',
+        '4314','4316','4319','4320','4321','4401','4402','4403','4404','4405','4406','4407','4408','4409',
+        '4410','4411','4412','4413','4415','4416','4417','4418','4419','4420','4421','4422','4423','4424',
+        '4425','4428','4501','4502','4503','4504','4505','4506','4507','4508','4509','4510','4511','4601',
+        '4602','4603','4604','4605','4701','4702','4704','4705','4712','4716','4721','4801','4802','4803',
+        '4804','4810','4817','4834','4835','4836','4905','5101','5103','5104','5201','5301','5302','5303',
+        '5304','5501','5502','5503','5608','5611','5701','5702','5703','5703A','5703B','5704','5704A',
+        '5704B','5704C','5704D','604','7001','7002','7003','7004','7004A','7004B','7005','7005A','7005B',
+        '7006','7007','7008','7009','7010','7011','7019','7027','7028','7029','7030','7101','7102','7103',
+        '7201','7202','7203','7204','7205','7206','7207A','7207B','7208A','7208B','7209','7210','7211',
+        '7212','7213','7214','7214A','7214B','7215','7216','7224','7301','7302','7303','7304','7305','7306',
+        '7307','7308','7311','7313','7314','7315','7401','7402','7502','7503','7504','7506','7601','8305',
+        '8306','8307','8401','8402','8403','8501','8502','8503','8504','8505','8506','8507','8509','8510',
+        '8512','8514','8519','8520','8601','8602','8603','8604','8605','8606','8609','8610','8612','8701',
+        '8702','8703','8704','8705','8813','8814','8815','8816','9106','9107','9202','9203','9204','STEMI1',
+        'STEMI2','STEMI3','9205','9220','DRUGP','TELMED','FP002_1','FP002_2','90004','90005'
+    ] AS text[]) AS codes
+),
+rule_hit AS (
+    SELECT f.vn, x.lbl, x.req, x.anyreq,
+           ARRAY(SELECT c FROM unnest(x.req) c WHERE NOT (c = ANY(f.adp)))
+             || CASE WHEN cardinality(x.anyreq) > 0 AND NOT (f.adp && x.anyreq)
+                     THEN ARRAY[array_to_string(x.anyreq, '/')] ELSE CAST(ARRAY[] AS text[]) END AS missing
+    FROM f
+    CROSS JOIN LATERAL (VALUES
+        ('TB: CXR',
+         is_tb AND (adp @> ARRAY['CXRTB'] OR icodes && ARRAY['3005047','3000212']),
+         CAST(ARRAY['CXRTB'] AS text[]), CAST(ARRAY[] AS text[])),
+        ('TB: 35001',
+         is_tb AND adp @> ARRAY['35001'],
+         CAST(ARRAY['T3310'] AS text[]), CAST(ARRAY[] AS text[])),
+        ('TB: 35103',
+         is_tb AND adp @> ARRAY['35103'],
+         CAST(ARRAY[] AS text[]), CAST(ARRAY['T3321','T3322'] AS text[])),
+        ('TB: 36018',
+         is_tb AND adp @> ARRAY['36018'],
+         CAST(ARRAY['T2130'] AS text[]), CAST(ARRAY[] AS text[])),
+        ('TB: FollowTB',
+         is_tb,
+         CAST(ARRAY['FOLLOWTB'] AS text[]), CAST(ARRAY[] AS text[])),
+        ('HIV: 30101 CBC',
+         is_hiv AND adp @> ARRAY['30101'],
+         CAST(ARRAY['LABCBCF1'] AS text[]), CAST(ARRAY[] AS text[])),
+        ('HIV: 32203 FBS',
+         is_hiv AND adp @> ARRAY['32203'],
+         CAST(ARRAY['LABFBSF1'] AS text[]), CAST(ARRAY[] AS text[])),
+        ('HIV: 32202 Cr',
+         is_hiv AND adp @> ARRAY['32202'],
+         CAST(ARRAY['LABCRF1'] AS text[]), CAST(ARRAY[] AS text[])),
+        ('HIV: 32502 TG',
+         is_hiv AND adp @> ARRAY['32502'],
+         CAST(ARRAY['LABTGF1'] AS text[]), CAST(ARRAY[] AS text[])),
+        ('HIV: 32501 Chol',
+         is_hiv AND adp @> ARRAY['32501'],
+         CAST(ARRAY['LABCHOLF1'] AS text[]), CAST(ARRAY[] AS text[])),
+        ('HIV: 32004 Lipid',
+         is_hiv AND adp @> ARRAY['32004'],
+         CAST(ARRAY['LABCHOLF1','LABTGF1'] AS text[]), CAST(ARRAY[] AS text[])),
+        ('HIV: 32310+32311/32003 ALT',
+         is_hiv AND (adp @> ARRAY['32310','32311'] OR adp @> ARRAY['32003']),
+         CAST(ARRAY['LABALTF1'] AS text[]), CAST(ARRAY[] AS text[])),
+        ('HIV: 30509 CD4',
+         is_hiv AND adp @> ARRAY['30509'],
+         CAST(ARRAY['LABCD4'] AS text[]), CAST(ARRAY[] AS text[])),
+        ('HIV: 36362 VL',
+         is_hiv AND adp @> ARRAY['36362'],
+         CAST(ARRAY['LABVL'] AS text[]), CAST(ARRAY[] AS text[])),
+        ('Thal D56: 30104',
+         is_d56 AND adp @> ARRAY['30104'],
+         CAST(ARRAY['TDT_HCT'] AS text[]), CAST(ARRAY[] AS text[])),
+        ('Thal D56: 30306',
+         is_d56 AND adp @> ARRAY['30306'],
+         CAST(ARRAY['TDT_SEF'] AS text[]), CAST(ARRAY[] AS text[])),
+        ('H9339 (56xxx)',
+         adp && ARRAY['56001','56002','56003','56004','56005','56006','56007','56008','56009','56010','56011','56020','56101','56110','56111','56120','56121','56301','56701','56702'],
+         CAST(ARRAY['H9339'] AS text[]), CAST(ARRAY[] AS text[])),
+        ('H9339',
+         adp @> ARRAY['H9339'] AND NOT (adp && ARRAY['56001','56002','56003','56004','56005','56006','56007','56008','56009','56010','56011','56020','56101','56110','56111','56120','56121','56301','56701','56702']),
+         CAST(ARRAY[] AS text[]), CAST(ARRAY[] AS text[])),
+        ('Psych F00-F99',
+         is_psy,
+         CAST(ARRAY[] AS text[]), CAST(ARRAY['H9449.1','H9449.2','H9433.1','H9433.2'] AS text[])),
+        ('ANC Z34-Z36: 30313',
+         is_anc AND adp @> ARRAY['30313'],
+         CAST(ARRAY['TLM_LTYP'] AS text[]), CAST(ARRAY[] AS text[]))
+    ) AS x(lbl, trig, req, anyreq)
+    WHERE x.trig
+    UNION ALL
+    SELECT f.vn,
+           'ADP claim list (' || array_to_string(ARRAY(SELECT c FROM unnest(f.adp) c WHERE c = ANY(b.codes) ORDER BY c), ',') || ')',
+           CAST(ARRAY[] AS text[]), CAST(ARRAY[] AS text[]), CAST(ARRAY[] AS text[])
+    FROM f CROSS JOIN biglist b
+    WHERE f.adp && b.codes
+    UNION ALL
+    SELECT f.vn,
+           'ADP H/S list (' || array_to_string(ARRAY(SELECT c FROM unnest(f.adp) c
+                 WHERE c = ANY(ARRAY['H9383','H9383.2','H9375','H9375.2','H9449.1','H9449.2','H9433.1','H9433.2','H9549','H9378.2','H9378.3','H9438.1','H9438.2','H0489','S1801','S1802']) ORDER BY c), ',') || ')',
+           CAST(ARRAY[] AS text[]), CAST(ARRAY[] AS text[]), CAST(ARRAY[] AS text[])
+    FROM f
+    WHERE f.adp && ARRAY['H9383','H9383.2','H9375','H9375.2','H9449.1','H9449.2','H9433.1','H9433.2','H9549','H9378.2','H9378.3','H9438.1','H9438.2','H0489','S1801','S1802']
+    UNION ALL
+    SELECT f.vn,
+           g.lbl || ' (' || array_to_string(d.drugs, ', ') || ')',
+           CAST(ARRAY[] AS text[]), CAST(ARRAY[] AS text[]), CAST(ARRAY[] AS text[])
+    FROM f
+    JOIN vdrug d ON d.vn = f.vn
+    JOIN (VALUES ('HIV', 'HIV drug'),
+                 ('CLOPI', 'Clopidogrel'),
+                 ('JOR2', 'Drug J2'),
+                 ('ANTIDOTE', 'Antidote'),
+                 ('IRON', 'Iron chelation D56')) AS g(grp, lbl) ON g.grp = d.grp
+    WHERE (d.grp <> 'HIV'  OR f.is_hiv)
+      AND (d.grp <> 'IRON' OR f.is_d56)
+    UNION ALL
+    SELECT f.vn,
+           'Female 15-59 (' || array_to_string(ARRAY(SELECT c FROM unnest(f.adp || f.pp) c
+                 WHERE c IN ('1B004N','1B004P','1B004_0N','1B004_0P') GROUP BY c ORDER BY c), ',') || ')',
+           CAST(ARRAY[] AS text[]), CAST(ARRAY[] AS text[]), CAST(ARRAY[] AS text[])
+    FROM f
+    WHERE f.sex = '2' AND f.age_y BETWEEN 15 AND 59
+      AND (f.adp && ARRAY['1B004N','1B004P','1B004_0N','1B004_0P']
+           OR f.pp && ARRAY['1B004N','1B004P','1B004_0N','1B004_0P'])
+),
+agg AS (
+    SELECT vn,
+           string_agg(CASE WHEN cardinality(missing) = 0 THEN lbl END, ' | ' ORDER BY lbl) AS claim_ok,
+           string_agg(CASE WHEN cardinality(missing) > 0
+                           THEN lbl || ' -> missing ' || array_to_string(missing, '+') END, ' | ' ORDER BY lbl) AS claim_missing,
+           SUM(CASE WHEN cardinality(missing) > 0 THEN 1 ELSE 0 END) AS n_missing
+    FROM rule_hit
+    GROUP BY vn
+)
+SELECT f.vstdate                    AS visit_date,
+       f.hn                         AS hn,
+       CONCAT(f.pname, f.fname)     AS first_name,
+       f.lname                      AS last_name,
+       f.pttype                     AS pttype,
+       pt.name                      AS pttype_name,
+       a.claim_ok                   AS claim_fund,
+       CASE WHEN a.n_missing = 0 THEN 'COMPLETE' ELSE 'INCOMPLETE' END AS check_status,
+       a.claim_missing              AS missing_detail,
+       f.vn                         AS vn
+FROM f
+JOIN agg a ON a.vn = f.vn
+LEFT JOIN pttype pt ON pt.pttype = f.pttype
+ORDER BY f.vstdate, f.hn;
+</script>
 <script>
 "use strict";
 const S = { debtFiles:[], repFiles:[], debt:[], repLines:[], visits:[], tab:'all', sortKey:null, sortDir:1, open:new Set() };
@@ -485,6 +1029,12 @@ $('btnDl').onclick=()=>{
     toast('กำลังดาวน์โหลด — ถ้าไม่มีไฟล์ ให้เปิดหน้านี้ในแท็บใหม่ หรือใช้ปุ่มคัดลอก');
   }catch(e){ toast('ดาวน์โหลดไม่ได้ในหน้านี้ — ใช้ปุ่มคัดลอกแทน'); }
 };
+
+/* ---------- SQL guide ---------- */
+$('sqlPre').textContent=$('sqlSrc').textContent.replace(/^\n/,'');
+$('btnCopySql').onclick=async()=>{ const t=$('sqlPre').textContent;
+  try{ await navigator.clipboard.writeText(t); toast('คัดลอก SQL แล้ว'); }
+  catch(e){ const ta=document.createElement('textarea'); ta.value=t; document.body.appendChild(ta); ta.select(); try{document.execCommand('copy'); toast('คัดลอก SQL แล้ว');}catch(_){toast('คัดลอกไม่สำเร็จ');} ta.remove(); } };
 </script>
 </body>
 </html>
