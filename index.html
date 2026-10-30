@@ -94,14 +94,24 @@ details.guide[open]>summary::before{content:'▾ ';}
 </style>
 </head>
 <body>
-<nav class="topnav">
-  <a href="https://drkulapol.github.io/opofc/index.html">ลูกหนี้ OP เบิกได้</a>
-  <a href="https://drkulapol.github.io/ipofc/index.html">ลูกหนี้ IPD เบิกได้</a>
-  <a href="https://drkulapol.github.io/ipuc/index.html">ลูกหนี้ IPD UC</a>
-  <a href="https://drkulapol.github.io/check-op-uc/index.html">ลูกหนี้ OP ON TOP</a>
-  <a href="https://drkulapol.github.io/opstp/index.html" class="on" aria-current="page">ลูกหนี้ OP STP</a>
-  <a href="https://drkulapol.github.io/ipstp/index.html">ลูกหนี้ IP STP</a>
-</nav>
+<!-- ===== DRK debtor nav (เหมือนกันทุก repo) : วางไว้ต่อจาก <body> ทันที ===== -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;600;700&display=swap">
+<style>
+.drk-nav{all:initial;display:block;position:relative;z-index:1000;background:#ffffff;border-bottom:1px solid #dde3df;font-family:"IBM Plex Sans Thai",system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif;line-height:1.4}
+.drk-nav *{box-sizing:border-box;font-family:inherit}
+.drk-nav .drk-in{max-width:1180px;margin:0 auto;padding:10px max(16px,env(safe-area-inset-right,0px)) 10px max(16px,env(safe-area-inset-left,0px));display:flex;flex-wrap:wrap;align-items:center;gap:8px 18px}
+.drk-nav .drk-brand{font-weight:700;font-size:14px;color:#1f6f5c;white-space:nowrap}
+.drk-nav .drk-links{display:flex;flex-wrap:wrap;gap:6px;min-width:0}
+.drk-nav a{font-size:13.5px;color:#1b2420;text-decoration:none;padding:5px 11px;border-radius:999px;border:1px solid #dde3df;background:#ffffff;white-space:nowrap;font-weight:400}
+.drk-nav a:hover{border-color:#1f6f5c;color:#1f6f5c}
+.drk-nav a:focus-visible{outline:2px solid #1f6f5c;outline-offset:2px}
+.drk-nav a[aria-current="page"]{background:#1f6f5c;border-color:#1f6f5c;color:#ffffff;font-weight:600}
+</style>
+<nav class="drk-nav" aria-label="ระบบตรวจสอบลูกหนี้รายตัว"><div class="drk-in"><span class="drk-brand">ตรวจสอบลูกหนี้รายตัว</span><div class="drk-links"><a href="https://drkulapol.github.io/opofc/index.html" data-repo="opofc">ลูกหนี้ OP เบิกได้</a><a href="https://drkulapol.github.io/ipofc/index.html" data-repo="ipofc">ลูกหนี้ IPD เบิกได้</a><a href="https://drkulapol.github.io/ipuc/index.html" data-repo="ipuc">ลูกหนี้ IPD UC</a><a href="https://drkulapol.github.io/check-op-uc/index.html" data-repo="check-op-uc">ลูกหนี้ OP UC ON TOP</a><a href="https://drkulapol.github.io/opstp/index.html" data-repo="opstp">ลูกหนี้ OP STP</a><a href="https://drkulapol.github.io/ipstp/index.html" data-repo="ipstp">ลูกหนี้ IP STP</a><a href="https://drkulapol.github.io/oplgo/index.html" data-repo="oplgo">ลูกหนี้ OP LGO</a><a href="https://drkulapol.github.io/iplgo/index.html" data-repo="iplgo">ลูกหนี้ IP LGO</a></div></div></nav>
+<script>(function(){var nav=document.querySelector(".drk-nav");if(!nav)return;var s=(location.pathname.split("/")[1]||"").toLowerCase(),n=nav.querySelectorAll("a[data-repo]"),hit=null;for(var i=0;i<n.length;i++)if(n[i].getAttribute("data-repo")===s)hit=n[i];if(hit){for(var j=0;j<n.length;j++)n[j].removeAttribute("aria-current");hit.setAttribute("aria-current","page");}
+/* ให้แถบชิดขอบจอเหมือนกันทุกเว็บ ไม่ว่า body ของแต่ละเว็บจะมี margin/padding เท่าไร */
+if(nav.parentElement===document.body){var b=getComputedStyle(document.body),f=function(p){return(parseFloat(b["margin"+p])||0)+(parseFloat(b["padding"+p])||0)},t=f("Top"),l=f("Left"),r=f("Right");nav.style.margin="-"+t+"px -"+r+"px "+t+"px -"+l+"px";}})();</script>
+<!-- ===== /DRK debtor nav ===== -->
 <header>
   <h1>ตรวจสอบลูกหนี้รายตัวสิทธิ STP เทียบ REP (OPD)</h1>
   <p>จับคู่ด้วย HN + วันที่รับบริการ · ใช้ VN = SEQ ช่วยตัดสินเมื่อวันเดียวกันมีหลาย visit · ประมวลผลในเบราว์เซอร์ ไม่มีการส่งข้อมูลออก</p>
